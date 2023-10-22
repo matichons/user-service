@@ -36,8 +36,8 @@ func (u *handlerUserRepository) GetByUsername(ctx *gin.Context, Username string)
 
 func (u *handlerUserRepository) Update(ctx *gin.Context, ur *domain.User) (domain.User, error) {
 	var user domain.User
-
-	if err := u.DB.Where("id = ?", ur.Id).First(&user).Error; err != nil {
+	id := ctx.MustGet("id").(int)
+	if err := u.DB.Where("id = ?", id).First(&user).Error; err != nil {
 		return user, err
 	}
 	if ur.Password != "" {

@@ -7,6 +7,7 @@ import (
 	"time"
 	"user-service/domain"
 	"user-service/middlewares"
+	"user-service/user/usecase"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,26 +29,40 @@ func NewUserHandler(g *gin.Engine, us domain.UserUsecase) {
 	g.POST("/login", handler.Login)
 	protected := g.Group("").Use(middlewares.Authz("verysecretkey", "AuthService"))
 	{
-		protected.PATCH("/update-profile/:id", handler.Update)
+		protected.PATCH("/update-profile", handler.Update)
 	}
 }
 
 func (u *UserHandler) Signup(g *gin.Context) {
-	var input domain.User
+	var input usecase.UserSignupPayload
 	if err := g.ShouldBindJSON(&input); err != nil {
 		g.JSON(http.StatusConflict, ResponseError{Message: err.Error()})
 		return
 	}
-	list, errDb := u.UUsecase.Signup(g, &input)
+	user, errDb := u.UUsecase.Signup(g, &domain.User{
+		Username:       input.Username,
+		Password:       input.Password,
+		Email:          input.Email,
+		ProfilePicture: &input.ProfilePicture,
+	})
 	if errDb != nil {
 		g.JSON(http.StatusConflict, ResponseError{Message: errDb.Error()})
 		return
 	}
-	g.JSON(http.StatusCreated, list)
+	tokenResponse, err := GenerateToken(user)
+	if err != nil {
+		log.Println(err)
+		g.JSON(500, gin.H{
+			"Error": "Error Signing Token",
+		})
+		g.Abort()
+		return
+	}
+	g.JSON(http.StatusCreated, tokenResponse)
 }
 
 func (u *UserHandler) Login(g *gin.Context) {
-	var payload domain.LoginPayload
+	var payload usecase.LoginPayload
 	if err := g.ShouldBindJSON(&payload); err != nil {
 		g.JSON(http.StatusConflict, ResponseError{Message: err.Error()})
 		return
@@ -68,14 +83,7 @@ func (u *UserHandler) Login(g *gin.Context) {
 	if err := <-errChan; err != nil {
 		fmt.Printf("%v ", err)
 	}
-
-	jwtWrapper := middlewares.JwtWrapper{
-		SecretKey:         "verysecretkey",
-		Issuer:            "AuthService",
-		ExpirationMinutes: 3600,
-		ExpirationHours:   12,
-	}
-	signedToken, err := jwtWrapper.GenerateToken(user.Id, user.Username)
+	tokenResponse, err := GenerateToken(user)
 	if err != nil {
 		log.Println(err)
 		g.JSON(500, gin.H{
@@ -84,7 +92,25 @@ func (u *UserHandler) Login(g *gin.Context) {
 		g.Abort()
 		return
 	}
-	signedtoken, err := jwtWrapper.RefreshToken(user.Id, user.Username)
+	g.JSON(200, tokenResponse)
+}
+
+func (u *UserHandler) Update(g *gin.Context) {
+	var input usecase.UserUpdatePayload
+	if err := g.ShouldBindJSON(&input); err != nil {
+		g.JSON(http.StatusConflict, ResponseError{Message: err.Error()})
+		return
+	}
+	user, errDb := u.UUsecase.Update(g, &domain.User{
+		Password:       input.Password,
+		Email:          input.Email,
+		ProfilePicture: &input.ProfilePicture,
+	})
+	if errDb != nil {
+		g.JSON(http.StatusConflict, ResponseError{Message: errDb.Error()})
+		return
+	}
+	tokenResponse, err := GenerateToken(user)
 	if err != nil {
 		g.JSON(500, gin.H{
 			"Error": "Error Signing Token",
@@ -92,23 +118,29 @@ func (u *UserHandler) Login(g *gin.Context) {
 		g.Abort()
 		return
 	}
-	tokenResponse := domain.LoginResponse{
+
+	g.JSON(http.StatusCreated, tokenResponse)
+}
+
+func GenerateToken(user domain.User) (usecase.LoginResponse, error) {
+	jwtWrapper := middlewares.JwtWrapper{
+		SecretKey:         "verysecretkey",
+		Issuer:            "AuthService",
+		ExpirationMinutes: 3600,
+		ExpirationHours:   12,
+	}
+	signedToken, err := jwtWrapper.GenerateToken(user.Id, user.Username)
+	if err != nil {
+		return usecase.LoginResponse{}, err
+	}
+	signedtoken, err := jwtWrapper.RefreshToken(user.Id, user.Username)
+	if err != nil {
+
+		return usecase.LoginResponse{}, err
+	}
+	tokenResponse := usecase.LoginResponse{
 		Token:        signedToken,
 		RefreshToken: signedtoken,
 	}
-	g.JSON(200, tokenResponse)
-}
-
-func (u *UserHandler) Update(g *gin.Context) {
-	var input domain.User
-	if err := g.ShouldBindJSON(&input); err != nil {
-		g.JSON(http.StatusConflict, ResponseError{Message: err.Error()})
-		return
-	}
-	list, errDb := u.UUsecase.Update(g, &input)
-	if errDb != nil {
-		g.JSON(http.StatusConflict, ResponseError{Message: errDb.Error()})
-		return
-	}
-	g.JSON(http.StatusCreated, list)
+	return tokenResponse, nil
 }
