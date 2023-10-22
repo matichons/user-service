@@ -1,0 +1,20 @@
+Database:
+  Host: "localhost"
+  Port: "5432"
+  DBName: "postgres"
+  DBUser: "user"
+  DBPass: "examplepassword"
+
+Server:
+  Address: ":8081"
+
+Connectrion:
+  Timeout: 5
+
+Redis:
+  Host: "localhost:6379"
+  MinIdleConns: 200
+  PoolSize: 12000
+  PoolTimeout: 240
+  Password: password
+  DB: 0

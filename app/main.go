@@ -1,49 +1,22 @@
 package main
 
 import (
-	"fmt"
 	"log"
-
-	"github.com/gin-gonic/gin"
-	"github.com/spf13/viper"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	_config "user-service/config"
+	_server "user-service/server"
 )
 
-func init() {
-	viper.SetConfigFile(`./config/config.json`)
-	err := viper.ReadInConfig()
-	if err != nil {
-		panic(err)
-	}
-
-	if viper.GetBool(`debug`) {
-		log.Println("Service RUN on DEBUG mode")
-	}
-}
 func main() {
+	config := _config.LoadConfig(".")
 
-	dbHost := viper.GetString(`database.host`)
-	dbPort := viper.GetString(`database.port`)
-	dbUser := viper.GetString(`database.user`)
-	dbPass := viper.GetString(`database.pass`)
-	dbName := viper.GetString(`database.name`)
-	psqlInfo := fmt.Sprintf("host=%s user=%s dbname=%s port=%s password=%s", dbHost, dbUser, dbName, dbPort, dbPass)
-	db, err := gorm.Open(postgres.Open(psqlInfo), &gorm.Config{
-		SkipDefaultTransaction: true,
-	})
+	db := _config.InitDB(config)
 
+	cacheClient := _config.NewRedisClient(config)
+	defer cacheClient.Close()
+	server := _server.NewServer(&config, db, cacheClient)
+
+	err := server.Run()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("%s", err.Error())
 	}
-	middL := InitMiddleware()
-	r := gin.Default()
-	r.GET("/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "pong",
-		})
-	})
-	r.Run() // listen and serve on 0.0.0.0:8080
 }
-
-//InitMiddleware

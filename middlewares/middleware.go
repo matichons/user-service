@@ -5,7 +5,7 @@ import "github.com/gin-gonic/gin"
 type GoMiddleware struct {
 }
 
-func (m *GoMiddleware) CORS(next gin.HandlerFunc) gin.HandlerFunc {
+func (m *GoMiddleware) CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
